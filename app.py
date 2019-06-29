@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
 # MagTek MSR100 Mini Swipe Card Reader
 # Written By: Jeffrey Ness
