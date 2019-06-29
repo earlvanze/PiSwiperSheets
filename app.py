@@ -12,6 +12,7 @@
 from subprocess import Popen, PIPE
 from time import sleep
 from datetime import datetime
+from select import select
 import board
 import digitalio
 import adafruit_character_lcd.character_lcd as characterlcd
@@ -220,27 +221,27 @@ def main():
     data = []
     datalist = []
     print("Swipe card:")
+    show_ip = True
     
     while True:
      
-        # date and time
+        # show current ip address or date and time
         lcd_line_1 = datetime.now().strftime('%m/%d %H:%M:%S\n')
-        
-        # current ip address
-        lcd_line_2 = ip_address
+
+        lcd_line_2 = ip_address if show_ip else "Swipe card..."
 
         # read card swiper
-        try:
-            results = device.read(endpoint.bEndpointAddress, endpoint.wMaxPacketSize, timeout=5)
-            if results:
-                data += results
-                datalist.append(results)
-                swiped = True
+        while True:
+            try:
+                results = device.read(endpoint.bEndpointAddress, endpoint.wMaxPacketSize, timeout=5)
+                if results:
+                    data += results
+                    datalist.append(results)
+                    swiped = True
 
-        except usb.core.USBError as e:
-            if e.args[1] == 'Operation timed out' and swiped:
-                print('Swiped:', swiped)
-                swiped = False
+            except usb.core.USBError as e:
+                if e.args[1] == 'Operation timed out' and swiped:
+                    break # timeout and swiped means we are done
 
         # create a list of 8 bit bytes and remove empty bytes
         ndata = []
@@ -273,17 +274,17 @@ def main():
                 traceback.print_exc()
                 lcd_line_2 = str(err.args[0])
                 
-            sdata = ''
+        #   sdata = ''
             lcd.message = lcd_line_1 + lcd_line_2
             sleep(2)
             lcd.clear()
-            lcd_line_2 = "Swipe card..."
             data = []
             datalist = []
         
         try:
             # combine both lines into one update to the display
             lcd.message = lcd_line_1 + lcd_line_2
+            show_ip = not show_ip
         except:
             traceback.print_exc()
             pass
