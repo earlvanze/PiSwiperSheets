@@ -9,6 +9,7 @@
 # With 16x2 LCD Support via Adafruit
 # https://learn.adafruit.com/drive-a-16x2-lcd-directly-with-a-raspberry-pi/
 
+from __future__ import print_function
 from subprocess import Popen, PIPE
 from time import sleep
 from datetime import datetime
@@ -17,12 +18,35 @@ import board
 import digitalio
 import adafruit_character_lcd.character_lcd as characterlcd
 import sys
-import os
+import os.path
 import usb.core
 import usb.util
 import traceback
+import pickle
+import json
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 
-# MagTek Device MSR100 Mini Swipe
+# Begin Google Sheets Setup
+# You should change these to match your own spreadsheet
+if os.path.exists('gsheet_id.txt'):
+    with open('gsheet_id.txt', 'r') as file:
+       json_repr = file.readline()
+       data = json.loads(json_repr)
+       GSHEET_ID = data["GSHEET_ID"]
+       RANGE_NAME = data["RANGE_NAME"]
+else:
+    GSHEET_ID = '19SdvkZeAnz8awjfj-RjgQ_XlAAswBSa-2SOPomoN9xs'
+    RANGE_NAME = 'Field Center Sign-In!A:A'
+    
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+]
+
+
+# Begin Magnetic Card Reader Setup
+# MagTek Device MSR90 Mini Swipe
 vendorid = 0xc216
 productid = 0x0180
 
@@ -161,6 +185,7 @@ try:
 except usb.core.USBError as e:
     raise Exception("Could not set configuration: %s" % str(e))
 
+# Begin LCD Setup
 # Modify this if you have a different sized character LCD
 lcd_columns = 16
 lcd_rows = 2
@@ -173,7 +198,6 @@ lcd_d4 = digitalio.DigitalInOut(board.D25)
 lcd_d5 = digitalio.DigitalInOut(board.D24)
 lcd_d6 = digitalio.DigitalInOut(board.D23)
 lcd_d7 = digitalio.DigitalInOut(board.D18)
-
 
 # Initialise the lcd class
 lcd = characterlcd.Character_LCD_Mono(lcd_rs, lcd_en, lcd_d4, lcd_d5, lcd_d6,
@@ -264,23 +288,36 @@ def main():
         lcd.clear()
         if sdata:
             try:
-                sdata = ''.join(sdata).split('^')
-                print(sdata)
-                card_num = sdata[0].strip('%B')
-                last_name, first_name = sdata[1].strip().split('/')
+                tdata = ''.join(sdata).split('^')
+                print(tdata)
+                card_num = tdata[0].strip('%B')
+                last_name, first_name = tdata[1].strip().split('/')
                 print(first_name, last_name, card_num)
                 lcd_line_2 = "Hi, {0}!".format(first_name.title())
             except Exception as err:
                 traceback.print_exc()
                 lcd_line_2 = str(err.args[0])
-                
-        #   sdata = ''
+            lcd_line_1 = datetime.now().strftime('%m/%d %H:%M:%S\n')
             lcd.message = lcd_line_1 + lcd_line_2
-            sleep(2)
+            
+            # Append to Google Sheet
+            try:
+                output_data = [[datetime.now().strftime('%m/%d/%y %H:%M:%S'), sdata]]
+                result = append_to_gsheet(output_data, GSHEET_ID, RANGE_NAME)
+                print(result)
+                lcd_line_2 = result
+            except Exception as err:
+                traceback.print_exc()
+                lcd_line_2 = str(err.args[0])
+            lcd_line_1 = datetime.now().strftime('%m/%d %H:%M:%S\n')
+            lcd.message = lcd_line_1 + lcd_line_2
+            sleep(1)
+
+            # Reset
             lcd.clear()
             data = []
             datalist = []
-        
+
         try:
             # combine both lines into one update to the display
             lcd.message = lcd_line_1 + lcd_line_2
@@ -290,6 +327,44 @@ def main():
             pass
         
         sleep(1)
+
+
+def append_to_gsheet(output_data=[], gsheet_id = GSHEET_ID, range_name = RANGE_NAME):
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server()
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+
+    service = build('sheets', 'v4', credentials=creds)
+
+    # Call the Sheets API
+    body = {
+        'values': output_data
+    }
+    try:
+        result = service.spreadsheets().values().append(
+            spreadsheetId=gsheet_id, range=range_name,
+            valueInputOption='USER_ENTERED', body=body).execute()
+        message = ('{0} rows updated.'.format(result.get('updates').get('updatedRows')))
+        return message
+    except Exception as err:
+        traceback.print_exc()
+        return json.loads(err.content.decode('utf-8'))['error']['message']
+
 
 if __name__ == '__main__':
     main()
