@@ -5,7 +5,7 @@ After=network-online.target
 
 [Service]
 ExecStart=/home/pi/startup.sh > log.txt 2>&1 &
-WorkingDirectory=/home/pi
+WorkingDirectory=/home/pi/PiSwiperSheets
 StandardOutput=inherit
 StandardError=inherit
 Restart=always
