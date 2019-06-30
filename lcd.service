@@ -1,15 +1,18 @@
 [Unit]
-Description=LCD date|time|ip
+Description=LCD date|time|ip|card swiper
 Requires=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python3 app.py &
+ExecStart=/home/pi/startup.sh > log.txt 2>&1 &
 WorkingDirectory=/home/pi
 StandardOutput=inherit
 StandardError=inherit
 Restart=always
 User=pi
+Type=forking
+SysVStartPriority=99
 
 [Install]
 WantedBy=network-online.target
+WantedBy=multi-user.target
