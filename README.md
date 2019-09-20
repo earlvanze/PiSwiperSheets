@@ -13,3 +13,5 @@ https://learn.adafruit.com/drive-a-16x2-lcd-directly-with-a-raspberry-pi
 (use systemctl to run as a service on startup)
 
 Tested using Python 3.5+
+
+Video demo: https://photos.app.goo.gl/L8uHdA78dg3ETudG6
